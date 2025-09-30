@@ -1,59 +1,16 @@
 /**
  * ATLAS JOBS PROXY SERVERLESS FUNCTION (NODE.JS)
  * This function is the only one that talks to the Atlas API, bypassing CORS.
+ * FIX: Using a highly escaped, single-line query string to satisfy the strict GraphQL parser.
  */
 
 // --- CONFIGURATION ---
 const ATLAS_API_URL = 'https://api.recruitwithatlas.com/public-graphql';
 const AGENCY_ALIAS = "pobl"; 
 
-// --- GRAPHQL QUERY (Strictly matching official documentation) ---
-// Using a template literal for readability, but we will clean up the string before sending it.
-const ATLAS_GRAPHQL_QUERY_TEMPLATE = `
-    query GetPublicJobOpenings($input: PublicJobOpeningInput!, $limit: Int!, $page: Int!) {
-        publicJobOpenings(input: $input, limit: $limit, page: $page) {
-            items {
-                ...PublicJobOpening
-                __typename
-            }
-            __typename
-        }
-    }
-    
-    fragment PublicJobOpening on PublicJobOpening {
-        id
-        jobRole
-        location {
-            ...Location
-            __typename
-        }
-        contractType
-        salary
-        salaryCurrency
-        __typename
-        // REMINDER: Add the field for the application link here once confirmed (e.g., publicUrl)
-    }
-    
-    fragment Location on Location {
-        name
-        country
-        locality
-        region
-        geo
-        street_address
-        postal_code
-        __typename
-    }
-`;
-
-// Helper function to clean the multi-line GraphQL string into a single valid string
-const cleanGraphQLQuery = (query) => {
-    // 1. Replace all newlines with a space
-    // 2. Remove multiple spaces and leading/trailing whitespace
-    return query.replace(/\s+/g, ' ').trim();
-};
-
-const ATLAS_GRAPHQL_QUERY = cleanGraphQLQuery(ATLAS_GRAPHQL_QUERY_TEMPLATE);
+// --- GRAPHQL QUERY (Single-line, escaped string for strict API parsers) ---
+// This exact structure matches the 'query' value inside the 'curl --data-raw' command.
+const ATLAS_GRAPHQL_QUERY = "query GetPublicJobOpenings($input: PublicJobOpeningInput!, $limit: Int!, $page: Int!) {\\n publicJobOpenings(input: $input, limit: $limit, page: $page) {\\n items {\\n ...PublicJobOpening\\n __typename\\n }\\n __typename\\n }\\n}\\n\\nfragment PublicJobOpening on PublicJobOpening {\\n id\\n jobRole\\n location {\\n ...Location\\n __typename\\n }\\n contractType\\n salary\\n salaryCurrency\\n __typename\\n}\\n\\nfragment Location on Location {\\n name\\n country\\n locality\\n region\\n geo\\n street_address\\n postal_code\\n __typename\\n}";
 
 
 const getJobsPayload = () => JSON.stringify({
