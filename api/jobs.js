@@ -1,9 +1,6 @@
-// Vercel Serverless Function (Node.js) to proxy the GraphQL request to Atlas API.
+// Vercel Serverless Function to proxy a GraphQL request to the Atlas API.
 
-// The fixed endpoint for the Atlas API
 const ATLAS_API_URL = 'https://api.recruitwithatlas.com/public-graphql';
-
-// Your confirmed agency alias
 const AGENCY_ALIAS = "pobl";
 
 // The complete, raw JSON request body as a string literal.
@@ -19,36 +16,33 @@ const RAW_REQUEST_BODY_STRING = JSON.stringify({
     "query": "query GetPublicJobOpenings($input: PublicJobOpeningInput!, $limit: Int!, $page: Int!) {\\n publicJobOpenings(input: $input, limit: $limit, page: $page) {\\n items {\\n ...PublicJobOpening\\n __typename\\n }\\n __typename\\n }\\n}\\n\\nfragment PublicJobOpening on PublicJobOpening {\\n id\\n jobRole\\n location {\\n ...Location\\n __typename\\n }\\n contractType\\n salary\\n salaryCurrency\\n __typename\\n}\\n\\nfragment Location on Location {\\n name\\n country\\n locality\\n region\\n geo\\n street_address\\n postal_code\\n __typename\\n}"
 });
 
-
-// Function to set all necessary CORS headers
+// A helper function to set all necessary CORS headers
 function setCorsHeaders(res) {
-    // Allows requests from any domain (*)
-    res.setHeader('Access-Control-Allow-Origin', '*'); 
-    // Allows the browser to send POST requests with specific headers
+    res.setHeader('Access-Control-Allow-Origin', '*'); // Allows requests from any domain
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    // Cache preflight request for 86400 seconds (1 day)
-    res.setHeader('Access-Control-Max-Age', '86400');
 }
 
 module.exports = async (req, res) => {
-    // 1. Handle CORS Preflight (OPTIONS request)
+    // 1. Handle the browser's CORS Preflight (OPTIONS) request
     if (req.method === 'OPTIONS') {
         setCorsHeaders(res);
-        res.status(204).end(); // Send empty response for successful preflight
+        res.status(204).end(); // Respond with "No Content" for a successful preflight
         return;
     }
     
     // 2. Set CORS Headers for the actual POST response
     setCorsHeaders(res);
 
+    // Ensure only POST requests proceed
     if (req.method !== 'POST') {
-        res.status(405).json({ error: "Method Not Allowed. Use POST." });
+        res.setHeader('Allow', 'POST');
+        res.status(405).json({ error: "Method Not Allowed. Please use POST." });
         return;
     }
 
     try {
-        // 3. Send POST request to Atlas API
+        // 3. Forward the POST request to the Atlas API
         const atlasResponse = await fetch(ATLAS_API_URL, {
             method: 'POST',
             headers: {
@@ -57,26 +51,22 @@ module.exports = async (req, res) => {
             body: RAW_REQUEST_BODY_STRING,
         });
 
-        // 4. Handle non-200 responses from Atlas API
+        // 4. Handle non-successful (e.g., 400, 500) responses from Atlas
         if (!atlasResponse.ok) {
             const errorText = await atlasResponse.text();
-            
-            console.error(`Atlas API HTTP Error: ${atlasResponse.status}`, errorText);
-
-            return res.status(400).json({ 
-                error: `Atlas API HTTP Error: ${atlasResponse.status}`,
-                details: errorText.substring(0, 500)
+            console.error(`Atlas API Error: ${atlasResponse.status}`, errorText);
+            return res.status(atlasResponse.status).json({ 
+                error: 'Failed to fetch data from Atlas API.',
+                details: errorText 
             });
         }
 
-        // 5. Forward the successful JSON response to the front-end
+        // 5. Forward the successful JSON response from Atlas to the client
         const data = await atlasResponse.json();
-        
-        res.setHeader('Content-Type', 'application/json');
         res.status(200).json(data);
 
     } catch (error) {
         console.error('Proxy Fetch Error:', error);
-        res.status(500).json({ error: 'Internal Proxy Error', details: error.message });
+        res.status(500).json({ error: 'An internal error occurred in the proxy.', details: error.message });
     }
 };
