@@ -1,76 +1,31 @@
 /**
  * ATLAS JOBS PROXY SERVERLESS FUNCTION (NODE.JS)
  * This function is the only one that talks to the Atlas API, bypassing CORS.
- * FIX: Reverting to a template literal and manually escaping the query content 
- * to ensure the GraphQL parser receives a valid, single-line string with
- * properly escaped newlines.
+ * FIX: Defining the entire request body as a raw string literal to bypass
+ * JavaScript's automatic string escaping and satisfy the strict Atlas GraphQL parser.
  */
 
 // --- CONFIGURATION ---
 const ATLAS_API_URL = 'https://api.recruitwithatlas.com/public-graphql';
 const AGENCY_ALIAS = "pobl"; 
 
-// 1. Define the Query using a multi-line template literal (clean for reading)
-const ATLAS_GRAPHQL_QUERY_TEMPLATE = `
-query GetPublicJobOpenings($input: PublicJobOpeningInput!, $limit: Int!, $page: Int!) {
- publicJobOpenings(input: $input, limit: $limit, page: $page) {
- items {
- ...PublicJobOpening
- __typename
- }
- __typename
- }
-}
-
-fragment PublicJobOpening on PublicJobOpening {
- id
- jobRole
- location {
- ...Location
- __typename
- }
- contractType
- salary
- salaryCurrency
- __typename
-}
-
-fragment Location on Location {
- name
- country
- locality
- region
- geo
- street_address
- postal_code
- __typename
-}
-`;
-
-// 2. Escape the template into the single string required by the JSON payload.
-// This is the most complex escaping logic used to finally satisfy the Atlas API's parser.
-const ATLAS_GRAPHQL_QUERY = ATLAS_GRAPHQL_QUERY_TEMPLATE
-    // 1. Remove leading/trailing whitespace from the whole string
-    .trim()
-    // 2. Escape existing backslashes (for JSON)
-    .replace(/\\/g, '\\\\')
-    // 3. Escape double quotes (for JSON)
-    .replace(/"/g, '\\"')
-    // 4. Convert all remaining literal newlines to the required escaped \n sequence
-    .replace(/\n/g, '\\n');
-
-
-const getJobsPayload = () => JSON.stringify({
-    operationName: "GetPublicJobOpenings",
-    variables: {
-        page: 1,
-        limit: 50,
-        input: {
-            agencyAlias: AGENCY_ALIAS
+// --- RAW REQUEST BODY STRING ---
+// This entire string is the JSON body sent to Atlas. 
+// It is intentionally defined with highly specific double-escaping (\\n) 
+// required for strict GraphQL servers that expect the string to be single-line JSON.
+const RAW_REQUEST_BODY_STRING = `
+{
+    "operationName": "GetPublicJobOpenings",
+    "variables": {
+        "page": 1,
+        "limit": 50,
+        "input": {
+            "agencyAlias": "${AGENCY_ALIAS}"
         }
     },
-    query: ATLAS_GRAPHQL_QUERY
-});
+    "query": "query GetPublicJobOpenings($input: PublicJobOpeningInput!, $limit: Int!, $page: Int!) {\\n publicJobOpenings(input: $input, limit: $limit, page: $page) {\\n items {\\n ...PublicJobOpening\\n __typename\\n }\\n __typename\\n }\\n}\\n\\nfragment PublicJobOpening on PublicJobOpening {\\n id\\n jobRole\\n location {\\n ...Location\\n __typename\\n }\\n contractType\\n salary\\n salaryCurrency\\n __typename\\n}\\n\\nfragment Location on Location {\\n name\\n country\\n locality\\n region\\n geo\\n street_address\\n postal_code\\n __typename\\n}"
+}
+`.trim(); // .trim() removes any leading/trailing whitespace around the JSON block.
 
 
 // Standard Vercel/Node.js Function Handler
@@ -96,7 +51,8 @@ module.exports = async (req, res) => {
         const atlasResponse = await fetch(ATLAS_API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: getJobsPayload()
+            // Use the raw string body directly
+            body: RAW_REQUEST_BODY_STRING
         });
         
         // Check for API errors and forward the response
