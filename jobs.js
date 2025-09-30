@@ -1,14 +1,13 @@
 /**
  * ATLAS JOBS PROXY SERVERLESS FUNCTION (NODE.JS)
- * * This function bypasses CORS restrictions by fetching data server-side
- * and adding the necessary 'Access-Control-Allow-Origin' header for Squarespace.
+ * This function is the only one that talks to the Atlas API, bypassing CORS.
  */
 
 // --- CONFIGURATION ---
 const ATLAS_API_URL = 'https://api.recruitwithatlas.com/public-graphql';
 const AGENCY_ALIAS = "pobl"; 
 
-// --- GRAPHQL QUERY (Exact structure from documentation) ---
+// --- GRAPHQL QUERY (Strictly matching official documentation) ---
 const ATLAS_GRAPHQL_QUERY = `
     query GetPublicJobOpenings($input: PublicJobOpeningInput!, $limit: Int!, $page: Int!) {
         publicJobOpenings(input: $input, limit: $limit, page: $page) {
@@ -61,7 +60,7 @@ const getJobsPayload = () => JSON.stringify({
 
 // Standard Vercel/Node.js Function Handler
 module.exports = async (req, res) => {
-    // 1. Set CORS Headers to allow Squarespace to access the data
+    // Set CORS Headers to allow the Squarespace domain to access the data
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -78,21 +77,21 @@ module.exports = async (req, res) => {
     }
 
     try {
-        // 2. Make the secure server-to-server POST request to Atlas API
+        // Make the secure server-to-server POST request to Atlas API
         const atlasResponse = await fetch(ATLAS_API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: getJobsPayload()
         });
         
-        // 3. Check for API errors and forward the response
+        // Check for API errors and forward the response
         if (!atlasResponse.ok) {
             const errorBody = await atlasResponse.text();
             res.status(atlasResponse.status).send(`Atlas API HTTP Error: ${atlasResponse.status} - ${errorBody}`);
             return;
         }
 
-        // 4. Send the successful JSON data back to the Squarespace page
+        // Send the successful JSON data back to the Squarespace page
         const data = await atlasResponse.json();
         res.status(200).json(data);
         
@@ -101,4 +100,3 @@ module.exports = async (req, res) => {
         res.status(500).send('Internal Server Error: Failed to connect to the Atlas API.');
     }
 };
-
