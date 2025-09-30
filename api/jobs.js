@@ -1,16 +1,63 @@
 /**
  * ATLAS JOBS PROXY SERVERLESS FUNCTION (NODE.JS)
  * This function is the only one that talks to the Atlas API, bypassing CORS.
- * FIX: Using a highly escaped, single-line query string to satisfy the strict GraphQL parser.
+ * FIX: Reverting to a template literal and manually escaping the query content 
+ * to ensure the GraphQL parser receives a valid, single-line string with
+ * properly escaped newlines.
  */
 
 // --- CONFIGURATION ---
 const ATLAS_API_URL = 'https://api.recruitwithatlas.com/public-graphql';
 const AGENCY_ALIAS = "pobl"; 
 
-// --- GRAPHQL QUERY (Single-line, escaped string for strict API parsers) ---
-// This exact structure matches the 'query' value inside the 'curl --data-raw' command.
-const ATLAS_GRAPHQL_QUERY = "query GetPublicJobOpenings($input: PublicJobOpeningInput!, $limit: Int!, $page: Int!) {\\n publicJobOpenings(input: $input, limit: $limit, page: $page) {\\n items {\\n ...PublicJobOpening\\n __typename\\n }\\n __typename\\n }\\n}\\n\\nfragment PublicJobOpening on PublicJobOpening {\\n id\\n jobRole\\n location {\\n ...Location\\n __typename\\n }\\n contractType\\n salary\\n salaryCurrency\\n __typename\\n}\\n\\nfragment Location on Location {\\n name\\n country\\n locality\\n region\\n geo\\n street_address\\n postal_code\\n __typename\\n}";
+// 1. Define the Query using a multi-line template literal (clean for reading)
+const ATLAS_GRAPHQL_QUERY_TEMPLATE = `
+query GetPublicJobOpenings($input: PublicJobOpeningInput!, $limit: Int!, $page: Int!) {
+ publicJobOpenings(input: $input, limit: $limit, page: $page) {
+ items {
+ ...PublicJobOpening
+ __typename
+ }
+ __typename
+ }
+}
+
+fragment PublicJobOpening on PublicJobOpening {
+ id
+ jobRole
+ location {
+ ...Location
+ __typename
+ }
+ contractType
+ salary
+ salaryCurrency
+ __typename
+}
+
+fragment Location on Location {
+ name
+ country
+ locality
+ region
+ geo
+ street_address
+ postal_code
+ __typename
+}
+`;
+
+// 2. Escape the template into the single string required by the JSON payload.
+// This is the most complex escaping logic used to finally satisfy the Atlas API's parser.
+const ATLAS_GRAPHQL_QUERY = ATLAS_GRAPHQL_QUERY_TEMPLATE
+    // 1. Remove leading/trailing whitespace from the whole string
+    .trim()
+    // 2. Escape existing backslashes (for JSON)
+    .replace(/\\/g, '\\\\')
+    // 3. Escape double quotes (for JSON)
+    .replace(/"/g, '\\"')
+    // 4. Convert all remaining literal newlines to the required escaped \n sequence
+    .replace(/\n/g, '\\n');
 
 
 const getJobsPayload = () => JSON.stringify({
