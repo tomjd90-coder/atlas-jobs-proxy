@@ -8,7 +8,8 @@ const ATLAS_API_URL = 'https://api.recruitwithatlas.com/public-graphql';
 const AGENCY_ALIAS = "pobl"; 
 
 // --- GRAPHQL QUERY (Strictly matching official documentation) ---
-const ATLAS_GRAPHQL_QUERY = `
+// Using a template literal for readability, but we will clean up the string before sending it.
+const ATLAS_GRAPHQL_QUERY_TEMPLATE = `
     query GetPublicJobOpenings($input: PublicJobOpeningInput!, $limit: Int!, $page: Int!) {
         publicJobOpenings(input: $input, limit: $limit, page: $page) {
             items {
@@ -44,6 +45,16 @@ const ATLAS_GRAPHQL_QUERY = `
         __typename
     }
 `;
+
+// Helper function to clean the multi-line GraphQL string into a single valid string
+const cleanGraphQLQuery = (query) => {
+    // 1. Replace all newlines with a space
+    // 2. Remove multiple spaces and leading/trailing whitespace
+    return query.replace(/\s+/g, ' ').trim();
+};
+
+const ATLAS_GRAPHQL_QUERY = cleanGraphQLQuery(ATLAS_GRAPHQL_QUERY_TEMPLATE);
+
 
 const getJobsPayload = () => JSON.stringify({
     operationName: "GetPublicJobOpenings",
